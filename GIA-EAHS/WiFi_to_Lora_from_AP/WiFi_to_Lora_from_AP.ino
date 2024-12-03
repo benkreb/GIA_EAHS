@@ -30,21 +30,21 @@ char txpacket[BUFFER_SIZE];
 
 bool lora_idle = true;
 
-// LoRa Event Definitions
+// LoRa Events
 static RadioEvents_t RadioEvents;
 void OnTxDone(void);
 void OnTxTimeout(void);
 
 // Wi-Fi Configuration
-const char *ssid = "EAHS_Routerr";       // Wi-Fi SSID
-const char *password = "Furkan31";      // Wi-Fi Password
-const char *serverURL = "http://192.168.4.1"; // Server IP Address
+const char *ssid = "EAHS_Routerr";       // Replace with your SSID
+const char *password = "Furkan31";      // Replace with your password
+const char *serverURL = "http://192.168.4.1"; // Replace with the access point IP
 
 // Timing for periodic operations
-unsigned long lastSendTime = 0;         // Last transmission timestamp
-unsigned long sendInterval = 10000;     // Transmission interval (10 seconds)
-int messageCounter = 0;                 // Counter for received messages
-String lastMessage = "";                // Stores the last fetched message
+unsigned long lastSendTime = 0;
+unsigned long sendInterval = 10000; // Send every 10 seconds
+int messageCounter = 0; // Counter for received messages
+String lastMessage = ""; // To store the last fetched message
 
 void setup() {
     Serial.begin(115200);
@@ -52,11 +52,9 @@ void setup() {
     // Initialize LoRa
     Mcu.begin(HELTEC_BOARD, SLOW_CLK_TPYE);
 
-    // LoRa events initialization
     RadioEvents.TxDone = OnTxDone;
     RadioEvents.TxTimeout = OnTxTimeout;
 
-    // Configure LoRa parameters
     Radio.Init(&RadioEvents);
     Radio.SetChannel(RF_FREQUENCY);
     Radio.SetTxConfig(MODEM_LORA, TX_OUTPUT_POWER, 0, LORA_BANDWIDTH,
@@ -66,7 +64,7 @@ void setup() {
 
     // Connect to Wi-Fi
     WiFi.begin(ssid, password);
-    Serial.print("Connecting to Wi-Fi...");
+    Serial.print("Connecting to Wi-Fi");
     while (WiFi.status() != WL_CONNECTED) {
         delay(1000);
         Serial.print(".");
@@ -77,66 +75,60 @@ void setup() {
 }
 
 void loop() {
-    // Check if the transmission interval has elapsed
     if (lora_idle && (millis() - lastSendTime >= sendInterval)) {
-        // Fetch the latest message from the server
+        // Fetch the latest message from the web server
         String message = fetchMessage();
 
-        // Process the message only if it's new and different from the last message
+        // Only proceed if a new message is received
         if (message.length() > 0 && message != lastMessage) {
-            lastMessage = message; // Update the last message
+            lastMessage = message; // Update last message
             messageCounter++;      // Increment the message counter
             Serial.printf("Message Counter: %d\n", messageCounter);
 
-            // Adjust the transmission frequency
-            // Example: Send only every 10th message
+            // Only send every 10th message
             if (messageCounter % 10 == 0) {
                 snprintf(txpacket, BUFFER_SIZE, "%s", message.c_str());
                 Serial.printf("\r\nSending packet: \"%s\", length: %d\r\n", txpacket, strlen(txpacket));
-                Radio.Send((uint8_t *)txpacket, strlen(txpacket)); // Send the message via LoRa
-                lora_idle = false; // Wait until the transmission is complete
+                Radio.Send((uint8_t *)txpacket, strlen(txpacket));
+                lora_idle = false;
             }
         }
-        lastSendTime = millis(); // Update the last transmission time
+        lastSendTime = millis(); // Update the send timestamp
     }
-    Radio.IrqProcess(); // Process LoRa events
+    Radio.IrqProcess();
 }
 
 void OnTxDone(void) {
-    // Called when the transmission is successfully completed
-    Serial.println("Transmission completed (TX done).");
-    lora_idle = true; // LoRa is ready for the next transmission
+    Serial.println("TX done.");
+    lora_idle = true;
 }
 
 void OnTxTimeout(void) {
-    // Called when the transmission times out
     Radio.Sleep();
-    Serial.println("Transmission timed out (TX Timeout).");
-    lora_idle = true; // LoRa is ready for the next transmission
+    Serial.println("TX Timeout.");
+    lora_idle = true;
 }
 
-// Function to fetch the latest message from the server
+// Function to fetch the latest message from the Wi-Fi server
 String fetchMessage() {
     if (WiFi.status() == WL_CONNECTED) {
         HTTPClient http;
-        String endpoint = String(serverURL) + "/latest"; // Endpoint to fetch the latest message
+        String endpoint = String(serverURL) + "/latest"; // Assuming /latest returns the last message
         http.begin(endpoint);
         int httpResponseCode = http.GET();
 
-        if (httpResponseCode == HTTP_CODE_OK) { // HTTP 200: Success
+        if (httpResponseCode == HTTP_CODE_OK) { // HTTP 200
             String payload = http.getString();
-            Serial.println("Message received: " + payload);
+            Serial.println("Received message: " + payload);
             http.end();
             return payload;
         } else {
-            // Print an error message if the server response is not OK
             Serial.printf("Error fetching message, HTTP code: %d\n", httpResponseCode);
             http.end();
         }
     } else {
-        // Attempt to reconnect if Wi-Fi is disconnected
         Serial.println("Wi-Fi not connected. Reconnecting...");
         WiFi.reconnect();
     }
-    return ""; // Return an empty string if fetching fails
+    return "";
 }
